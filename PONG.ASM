@@ -1,0 +1,391 @@
+; vim:ft=masm
+
+STACK SEGMENT PARA STACK
+  DB 64 DUP (' ')
+STACK ENDS
+
+DATA SEGMENT PARA 'DATA'
+  WINDOW_WIDTH DW 320
+  WINDOW_HEIGHT DW 200
+  WINDOW_PADDING DW 6
+
+  BALL_X DW 158
+  BALL_Y DW 98
+  BALL_SIZE DW 04h
+
+  ORIGINAL_BALL_X DW 158 ; WINDOW_WIDTH  / 2 - BALL_SIZE / 2
+  ORIGINAL_BALL_Y DW 98  ; WINDOW_HEIGHT / 2 - BALL_SIZE / 2
+
+  BALL_X_VELOCITY DW 05h
+  BALL_Y_VELOCITY DW 02h
+
+  LEFT_PADDLE_X DW 0Ah
+  LEFT_PADDLE_Y DW 6
+
+  RIGHT_PADDLE_X DW 130h
+  RIGHT_PADDLE_Y DW 6
+
+  PADDLE_WIDTH DW 05h
+  PADDLE_HEIGHT DW 1Fh
+  PADDLE_VELOCITY DW 05h
+
+  TIME_AUX DB 0
+
+  ; DB 8 bits
+  ; DW 16 bits
+DATA ENDS
+
+CODE SEGMENT PARA 'CODE'
+
+  MAIN PROC FAR
+    ASSUME CS:CODE, DS:DATA, SS:STACK
+    PUSH DS
+    SUB AX, AX
+    PUSH AX
+    MOV AX, DATA
+    MOV DS, AX
+    POP AX
+    POP AX
+
+    ; set video mode
+    ; https://stanislavs.org/helppc/int_10-0.html
+    MOV AH, 00h
+    MOV AL, 0Dh ; mode
+    INT 10h
+
+    ; set background color
+    MOV AH, 0Bh
+    MOV BH, 00h
+    MOV BL, 00h ; https://en.wikipedia.org/wiki/BIOS_color_attributes
+    INT 10h
+
+    CHECK_TIME:
+      MOV AH, 2Ch
+      INT 21h
+
+      CMP DL, TIME_AUX
+      JE CHECK_TIME
+
+      MOV TIME_AUX, DL
+
+    CALL CLEAR_SCREEN
+    CALL MOVE_BALL
+    CALL DRAW_BALL
+
+    CALL MOVE_PADDLES
+    CALL DRAW_PADDLES
+
+    JMP CHECK_TIME
+
+    RET
+  MAIN ENDP
+
+  RESET_BALL_POSITION PROC NEAR
+    MOV AX, ORIGINAL_BALL_X
+    MOV BALL_X, AX
+
+    MOV AX, ORIGINAL_BALL_Y
+    MOV BALL_Y, AX
+
+    RET
+  RESET_BALL_POSITION ENDP
+
+  MOVE_BALL PROC NEAR
+    ; move ball's x
+    MOV AX, BALL_X_VELOCITY
+    ADD BALL_X, AX
+
+    ; BALL_X < WINDOW_PADDING
+    MOV AX, WINDOW_PADDING
+    CMP BALL_X, AX
+    JL RESET_BALL_POSITION
+
+    ; BALL_X > WINDOW_WIDTH - BALL_SIZE - WINDOW_PADDING
+    MOV AX, WINDOW_WIDTH
+    SUB AX, BALL_SIZE
+    SUB AX, WINDOW_PADDING
+    CMP BALL_X, AX
+    JG RESET_BALL_POSITION
+
+    ; move ball's y
+    MOV AX, BALL_Y_VELOCITY
+    ADD BALL_Y, AX
+
+    ; BALL_Y < 0
+    CMP BALL_Y, 0
+    JL REACH_Y
+
+    ; BALL_Y > WINDOW_HEIGHT - BALL_SIZE
+    MOV AX, WINDOW_HEIGHT
+    SUB AX, BALL_SIZE
+    CMP BALL_Y, AX
+    JG REACH_Y
+
+    ; Check if the ball is colliding with the right paddle
+    MOV AX, BALL_X
+    ADD AX, BALL_SIZE
+    CMP AX, RIGHT_PADDLE_X
+    JNG CHECK_LPADDLE
+
+    MOV AX, RIGHT_PADDLE_X
+    ADD AX, PADDLE_WIDTH
+    CMP BALL_X, AX
+    JNL CHECK_LPADDLE
+
+    MOV AX, BALL_Y
+    ADD AX, BALL_SIZE
+    CMP AX, RIGHT_PADDLE_Y
+    JNG CHECK_LPADDLE
+
+    MOV AX, RIGHT_PADDLE_Y
+    ADD AX, PADDLE_HEIGHT
+    CMP BALL_Y, AX
+    JNL CHECK_LPADDLE
+
+    NEG BALL_X_VELOCITY
+    RET
+
+    CHECK_LPADDLE:
+      MOV AX, BALL_X
+      ADD AX, BALL_SIZE
+      CMP AX, LEFT_PADDLE_X
+      JNG EXIT_COLLISIONS
+
+      MOV AX, LEFT_PADDLE_X
+      ADD AX, PADDLE_WIDTH
+      CMP BALL_X, AX
+      JNL EXIT_COLLISIONS
+
+      MOV AX, BALL_Y
+      ADD AX, BALL_SIZE
+      CMP AX, LEFT_PADDLE_Y
+      JNG EXIT_COLLISIONS
+
+      MOV AX, LEFT_PADDLE_Y
+      ADD AX, PADDLE_HEIGHT
+      CMP BALL_Y, AX
+      JNL EXIT_COLLISIONS
+
+      NEG BALL_X_VELOCITY
+
+    EXIT_COLLISIONS:
+    RET
+
+    REACH_Y:
+      MOV BALL_Y, AX
+      NEG BALL_Y_VELOCITY
+      RET
+  MOVE_BALL ENDP
+
+  MOVE_PADDLES PROC NEAR
+    ; https://www.stanislavs.org/helppc/int_16.html
+    ; https://www.asciitable.com
+
+    ; check key press
+    MOV AH, 01h
+    INT 16h
+    JNZ DONE
+      ; "JZ cannot jump too far" as far as I understood.
+      ; https://stackoverflow.com/questions/39427980/relative-jump-out-of-range-by
+      JMP EXIT_DRAW
+    DONE:
+
+    ; key pressed key : AL
+    MOV AH, 00h
+    INT 16h
+
+    CMP AL, 77h ; w
+    JE MOVE_LPADDLE_UP
+    CMP AL, 57h ; W
+    JE MOVE_LPADDLE_UP
+
+    CMP AL, 73h ; s
+    JE MOVE_LPADDLE_DOWN
+    CMP AL, 53h ; S
+    JE MOVE_LPADDLE_DOWN
+
+    CMP AL, 6Fh ; o
+    JE MOVE_RPADDLE_UP
+    CMP AL, 4Fh ; O
+    JE MOVE_RPADDLE_UP
+
+    CMP AL, 6Ch ; l
+    JE MOVE_RPADDLE_DOWN
+    CMP AL, 4Ch ; L
+    JE MOVE_RPADDLE_DOWN
+
+    JMP EXIT_DRAW
+
+    MOVE_LPADDLE_UP:
+      MOV AX, PADDLE_VELOCITY
+      SUB LEFT_PADDLE_Y, AX
+
+      MOV AX, WINDOW_PADDING
+      CMP LEFT_PADDLE_Y, AX
+      JL FIX_LPADDLE_TOP
+
+      JMP EXIT_DRAW
+
+      FIX_LPADDLE_TOP:
+        MOV LEFT_PADDLE_Y, AX
+        RET
+
+    MOVE_LPADDLE_DOWN:
+      MOV AX, PADDLE_VELOCITY
+      ADD LEFT_PADDLE_Y, AX
+
+      MOV AX, WINDOW_HEIGHT
+      SUB AX, WINDOW_PADDING
+      SUB AX, PADDLE_HEIGHT
+      CMP LEFT_PADDLE_Y, AX
+      JG FIX_LPADDLE_BOTTOM
+
+      JMP EXIT_DRAW
+
+      FIX_LPADDLE_BOTTOM:
+        MOV LEFT_PADDLE_Y, AX
+        RET
+
+    MOVE_RPADDLE_UP:
+      MOV AX, PADDLE_VELOCITY
+      SUB RIGHT_PADDLE_Y, AX
+
+      MOV AX, WINDOW_PADDING
+      CMP RIGHT_PADDLE_Y, AX
+      JL FIX_RPADDLE_TOP
+
+      JMP EXIT_DRAW
+
+      FIX_RPADDLE_TOP:
+        MOV RIGHT_PADDLE_Y, AX
+        RET
+
+    MOVE_RPADDLE_DOWN:
+      MOV AX, PADDLE_VELOCITY
+      ADD RIGHT_PADDLE_Y, AX
+
+      MOV AX, WINDOW_HEIGHT
+      SUB AX, WINDOW_PADDING
+      SUB AX, PADDLE_HEIGHT
+      CMP RIGHT_PADDLE_Y, AX
+      JG FIX_RPADDLE_BOTTOM
+
+      JMP EXIT_DRAW
+
+      FIX_RPADDLE_BOTTOM:
+        MOV RIGHT_PADDLE_Y, AX
+        RET
+
+    EXIT_DRAW:
+      RET
+  MOVE_PADDLES ENDP
+
+  DRAW_BALL PROC NEAR
+    MOV CX, BALL_X
+    MOV DX, BALL_Y
+
+    DRAW_PIXEL:
+      ; draw pixel
+      MOV AH, 0Ch
+      MOV AL, 0Fh ; color
+      MOV BH, 00h ; page number
+      INT 10h
+
+      INC CX ; x++
+
+      ; !(CX - BALL_X > BALL_SIZE)
+      ; keep printing this line
+      MOV AX, CX
+      SUB AX, BALL_X
+      CMP AX, BALL_SIZE
+      JNG DRAW_PIXEL
+
+      MOV CX, BALL_X ; reset x
+      INC DX         ; y++
+
+      ; !(DX - BALL_Y > BALL_SIZE)
+      ; keep printing the next line
+      MOV AX, DX
+      SUB AX, BALL_Y
+      CMP AX, BALL_SIZE
+      JNG DRAW_PIXEL
+
+    RET
+  DRAW_BALL ENDP
+
+  DRAW_PADDLES PROC NEAR
+    MOV CX, LEFT_PADDLE_X
+    MOV DX, LEFT_PADDLE_Y
+
+    LPADDLE_DRAW_PIXEL:
+      ; draw pixel
+      MOV AH, 0Ch
+      MOV AL, 0Fh ; color
+      MOV BH, 00h ; page number
+      INT 10h
+
+      INC CX ; x++
+
+      ; !(CX - PADDLE_X > PADDLE_WIDTH)
+      ; keep printing this line
+      MOV AX, CX
+      SUB AX, LEFT_PADDLE_X
+      CMP AX, PADDLE_WIDTH
+      JNG LPADDLE_DRAW_PIXEL
+
+      MOV CX, LEFT_PADDLE_X ; reset x
+      INC DX                ; y++
+
+      ; !(DX - LEFT_PADDLE_Y > PADDLE_HEIGHT)
+      ; keep printing the next line
+      MOV AX, DX
+      SUB AX, LEFT_PADDLE_Y
+      CMP AX, PADDLE_HEIGHT
+      JNG LPADDLE_DRAW_PIXEL
+
+    MOV CX, RIGHT_PADDLE_X
+    MOV DX, RIGHT_PADDLE_Y
+
+    RPADDLE_DRAW_PIXEL:
+      ; draw pixel
+      MOV AH, 0Ch
+      MOV AL, 0Fh ; color
+      MOV BH, 00h ; page number
+      INT 10h
+
+      INC CX ; x++
+
+      ; !(CX - PADDLE_X > PADDLE_WIDTH)
+      ; keep printing this line
+      MOV AX, CX
+      SUB AX, RIGHT_PADDLE_X
+      CMP AX, PADDLE_WIDTH
+      JNG RPADDLE_DRAW_PIXEL
+
+      MOV CX, RIGHT_PADDLE_X ; reset x
+      INC DX                 ; y++
+
+      ; !(DX - PADDLE_Y > PADDLE_HEIGHT)
+      ; keep printing the next line
+      MOV AX, DX
+      SUB AX, RIGHT_PADDLE_Y
+      CMP AX, PADDLE_HEIGHT
+      JNG RPADDLE_DRAW_PIXEL
+
+    RET
+  DRAW_PADDLES ENDP
+
+  CLEAR_SCREEN PROC NEAR
+    MOV AX, 0A000h  ; Set the video memory segment to 0A000h
+    MOV ES, AX
+    MOV DI, 0       ; ES:0 is the start of the framebuffer
+    MOV CX, 7D00h   ; Store the total number of bytes required for mode 0Dh (320x200 at 16 colors)
+    CLD
+    XOR AX, AX
+    REP STOSW       ; zero CX * 2 bytes at ES:DI
+
+    RET
+  CLEAR_SCREEN ENDP
+
+CODE ENDS
+END
