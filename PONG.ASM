@@ -407,14 +407,26 @@ CODE SEGMENT PARA 'CODE'
 	DRAW_PADDLES ENDP
 
 	DRAW_UI PROC NEAR
+		; print left paddle points
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 04h ; row
+		MOV DL, 06h ; column
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOUT
+		LEA DX, LEFT_PADDLE_TEXT_POINTS
+		INT 21h
+
+		; print right paddle points
 		MOV AH, 02h
 		MOV BH, 00h
 		MOV DH, 04h
-		MOV DL, 06h
+		MOV DL, 1Fh
 		INT 10h
 
 		MOV AH, 09h
-		LEA DX, LEFT_PADDLE_TEXT_POINTS
+		LEA DX, RIGHT_PADDLE_TEXT_POINTS
 		INT 21h
 
 		RET	
