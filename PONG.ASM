@@ -34,6 +34,12 @@ DATA SEGMENT PARA 'DATA'
 	PADDLE_VELOCITY DW 05h
 
 	TIME_AUX DB 0
+	GAME_ACTIVE DB 1
+
+	GAME_OVER_TITLE DB 'GAME OVER', '$'
+	GAME_OVER_WINNER DB 'Player 0 won', '$'
+	GAME_OVER_PLAY_AGAIN_TEXT DB 'Press R to play again', '$'
+	WINNER_INDEX DB 0
 
 	; DB 8 bits
 	; DW 16 bits
@@ -64,6 +70,9 @@ CODE SEGMENT PARA 'CODE'
 		INT 10h
 
 		CHECK_TIME:
+			CMP GAME_ACTIVE, 00h
+			JE SHOW_GAME_OVER
+
 			MOV AH, 2Ch
 			INT 21h
 
@@ -82,6 +91,10 @@ CODE SEGMENT PARA 'CODE'
 		CALL DRAW_UI
 
 		JMP CHECK_TIME
+
+		SHOW_GAME_OVER:
+			CALL DRAW_GAME_OVER
+			JMP CHECK_TIME
 
 		RET
 	MAIN ENDP
@@ -122,6 +135,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP LEFT_PADDLE_POINTS, 05h
 			JE GAME_OVER
 
+			MOV WINNER_INDEX, 01h
 			RET
 
 		WIN_RPADDLE:
@@ -132,6 +146,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP RIGHT_PADDLE_POINTS, 05h
 			JE GAME_OVER
 
+			MOV WINNER_INDEX, 02h
 			RET
 
 		GAME_OVER:
@@ -140,6 +155,8 @@ CODE SEGMENT PARA 'CODE'
 
 			CALL UPDATE_LPADDLE_POINTS_TEXT
 			CALL UPDATE_RPADDLE_POINTS_TEXT
+
+			MOV GAME_ACTIVE, 00h
 			RET
 
 		; move ball's y
@@ -435,7 +452,7 @@ CODE SEGMENT PARA 'CODE'
 		INT 21h
 
 		RET	
-	DRAW_UI ENDP
+	draw_UI ENDP
 
 	UPDATE_LPADDLE_POINTS_TEXT PROC NEAR
 		XOR AX, AX
@@ -456,6 +473,69 @@ CODE SEGMENT PARA 'CODE'
 
 		RET
 	UPDATE_RPADDLE_POINTS_TEXT ENDP
+
+	DRAW_GAME_OVER PROC NEAR
+		CALL CLEAR_SCREEN
+
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 04h ; raw number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, GAME_OVER_TITLE
+		INT 21h
+
+		; show the winner
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 06h ; raw number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		CALL UPDATE_WINNER_TEXT
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, GAME_OVER_WINNER
+		INT 21h
+
+		; Show the play again message
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 08h ; raw number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, GAME_OVER_PLAY_AGAIN_TEXT
+		INT 21h
+
+		; wait for key press
+		MOV AH, 00h
+		INT 16h
+
+		CMP AL, 'R'
+		JE RESTART_GAME
+
+		CMP AL, 'r'
+		JE RESTART_GAME
+
+		RET
+
+		RESTART_GAME:
+			MOV GAME_ACTIVE, 01h
+			RET
+	DRAW_GAME_OVER ENDP
+
+	UPDATE_WINNER_TEXT PROC NEAR
+		MOV AL, WINNER_INDEX
+		ADD AL, 30h
+
+		MOV [GAME_OVER_WINNER + 7], AL
+
+		RET
+	UPDATE_WINNER_TEXT ENDP
 
 	CLEAR_SCREEN PROC NEAR
 		MOV AX, 0A000h	; Set the video memory segment to 0A000h
