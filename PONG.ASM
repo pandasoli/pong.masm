@@ -34,12 +34,20 @@ DATA SEGMENT PARA 'DATA'
 	PADDLE_VELOCITY DW 05h
 
 	TIME_AUX DB 0
-	GAME_ACTIVE DB 1
+	GAME_ACTIVE DB 1   ; bool
+	EXITING_GAME DB 0  ; bool
+	CURRENT_SCENE DB 0 ; 0 - main; 1 - game
 
 	GAME_OVER_TITLE DB 'GAME OVER', '$'
 	GAME_OVER_WINNER DB 'Player 0 won', '$'
-	GAME_OVER_PLAY_AGAIN_TEXT DB 'Press R to play again', '$'
+	GAME_OVER_PLAY_AGAIN DB 'Press R to play again', '$'
+	GAME_OVER_GO_MAIN_MENU DB 'Press E to exit to main menu', '$'
 	WINNER_INDEX DB 0
+
+	MAIN_MENU_TITLE DB 'MAIN MENU', '$'
+	MAIN_MENU_SINGLEPLAYER DB 'SINGLEPLAYER - S KEY', '$'
+	MAIN_MENU_MULTIPLAYER DB 'MULTIPLAYER - M KEY', '$'
+	MAIN_MENU_EXIT DB 'EXIT GAME - E KEY', '$'
 
 	; DB 8 bits
 	; DW 16 bits
@@ -70,6 +78,12 @@ CODE SEGMENT PARA 'CODE'
 		INT 10h
 
 		CHECK_TIME:
+			CMP EXITING_GAME, 01h
+			JE START_EXIT
+
+			CMP CURRENT_SCENE, 00h
+			JE SHOW_MAIN_MENU
+
 			CMP GAME_ACTIVE, 00h
 			JE SHOW_GAME_OVER
 
@@ -95,6 +109,13 @@ CODE SEGMENT PARA 'CODE'
 		SHOW_GAME_OVER:
 			CALL DRAW_GAME_OVER
 			JMP CHECK_TIME
+
+		SHOW_MAIN_MENU:
+			CALL DRAW_MAIN_MENU
+			JMP CHECK_TIME
+
+		START_EXIT:
+			CALL CONCLUDE_EXIT_GAME
 
 		RET
 	MAIN ENDP
@@ -479,7 +500,7 @@ CODE SEGMENT PARA 'CODE'
 
 		MOV AH, 02h ; set cursor position
 		MOV BH, 00h ; page number
-		MOV DH, 04h ; raw number
+		MOV DH, 04h ; row number
 		MOV DL, 04h ; column number
 		INT 10h
 
@@ -490,7 +511,7 @@ CODE SEGMENT PARA 'CODE'
 		; show the winner
 		MOV AH, 02h ; set cursor position
 		MOV BH, 00h ; page number
-		MOV DH, 06h ; raw number
+		MOV DH, 06h ; row number
 		MOV DL, 04h ; column number
 		INT 10h
 
@@ -503,12 +524,23 @@ CODE SEGMENT PARA 'CODE'
 		; Show the play again message
 		MOV AH, 02h ; set cursor position
 		MOV BH, 00h ; page number
-		MOV DH, 08h ; raw number
+		MOV DH, 08h ; row number
 		MOV DL, 04h ; column number
 		INT 10h
 
 		MOV AH, 09h ; write string to STDOU
-		LEA DX, GAME_OVER_PLAY_AGAIN_TEXT
+		LEA DX, GAME_OVER_PLAY_AGAIN
+		INT 21h
+
+		; Show exit to main menu message
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 0Ah ; row number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, GAME_OVER_GO_MAIN_MENU
 		INT 21h
 
 		; wait for key press
@@ -517,16 +549,105 @@ CODE SEGMENT PARA 'CODE'
 
 		CMP AL, 'R'
 		JE RESTART_GAME
-
 		CMP AL, 'r'
 		JE RESTART_GAME
+
+		CMP AL, 'E'
+		JE EXIT_TO_MAIN
+		CMP AL, 'e'
+		JE EXIT_TO_MAIN
 
 		RET
 
 		RESTART_GAME:
 			MOV GAME_ACTIVE, 01h
 			RET
+
+		EXIT_TO_MAIN:
+			MOV CURRENT_SCENE, 00h
+			RET
 	DRAW_GAME_OVER ENDP
+
+	DRAW_MAIN_MENU PROC NEAR
+		CALL CLEAR_SCREEN
+
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 04h ; row number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, MAIN_MENU_TITLE
+		INT 21h
+
+		; show single player option
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 06h ; row number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, MAIN_MENU_SINGLEPLAYER
+		INT 21h
+
+		; show multiplayer option
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 08h ; row number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, MAIN_MENU_MULTIPLAYER
+		INT 21h
+
+		; show the exit message
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		MOV DH, 0Ah ; row number
+		MOV DL, 04h ; column number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOU
+		LEA DX, MAIN_MENU_EXIT
+		INT 21h
+
+		; wait for key press
+		WAIT_KEY_PRESS:
+			MOV AH, 00h
+			INT 16h
+
+			CMP AL, 'S'
+			JE START_SINGLEPLAYER
+			CMP AL, 's'
+			JE START_SINGLEPLAYER
+
+			CMP AL, 'M'
+			JE START_MULTIPLAYER
+			CMP AL, 'm'
+			JE START_MULTIPLAYER
+
+			CMP AL, 'E'
+			JE EXIT_GAME
+			CMP AL, 'e'
+			JE EXIT_GAME
+
+			JMP WAIT_KEY_PRESS
+
+		START_SINGLEPLAYER:
+			MOV CURRENT_SCENE, 01h
+			MOV GAME_ACTIVE, 01h
+			RET
+
+		START_MULTIPLAYER:
+			JMP WAIT_KEY_PRESS
+
+		EXIT_GAME:
+			MOV EXITING_GAME, 01h
+			RET
+	DRAW_MAIN_MENU ENDP
 
 	UPDATE_WINNER_TEXT PROC NEAR
 		MOV AL, WINNER_INDEX
@@ -538,16 +659,27 @@ CODE SEGMENT PARA 'CODE'
 	UPDATE_WINNER_TEXT ENDP
 
 	CLEAR_SCREEN PROC NEAR
-		MOV AX, 0A000h	; Set the video memory segment to 0A000h
+		MOV AX, 0A000h ; Set the video memory segment to 0A000h
 		MOV ES, AX
-		MOV DI, 0			 ; ES:0 is the start of the framebuffer
-		MOV CX, 7D00h	 ; Store the total number of bytes required for mode 0Dh (320x200 at 16 colors)
+		MOV DI, 0      ; ES:0 is the start of the framebuffer
+		MOV CX, 7D00h  ; Store the total number of bytes required for mode 0Dh (320x200 at 16 colors)
 		CLD
 		XOR AX, AX
-		REP STOSW			 ; zero CX * 2 bytes at ES:DI
+		REP STOSW      ; zero CX * 2 bytes at ES:DI
 
 		RET
 	CLEAR_SCREEN ENDP
+
+	CONCLUDE_EXIT_GAME PROC NEAR
+		MOV AH, 00h
+		MOV AL, 02h ; set text mode
+		INT 10h
+
+		MOV AH, 4Ch ; end program
+		INT 21h
+
+		RET
+	CONCLUDE_EXIT_GAME ENDP
 
 CODE ENDS
 END
