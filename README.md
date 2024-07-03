@@ -1,6 +1,6 @@
 <div align='center'>
 
-# Pong for DOS &nbsp; <img width='32' src='https://raw.githubusercontent.com/pandasoli/twemojis/master/1f3d3.svg'>
+# Pong for DOS &nbsp; <img width='32' src='https://www.svgrepo.com/show/407211/ping-pong.svg'>
 
 As your computer is already a big piece of old trash, how about installing DOS to play Pong on it?
 </div>
