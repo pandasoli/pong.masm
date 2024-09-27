@@ -263,9 +263,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP AI_CONTROLLED, 01h
 			JE CONTROL_BY_AI
 
-			; "JZ cannot jump too far" as far as I understood.
-			; https://stackoverflow.com/questions/39427980/relative-jump-out-of-range-by
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 		DONE:
 
 		; key pressed key : AL
@@ -282,10 +280,19 @@ CODE SEGMENT PARA 'CODE'
 		CMP AL, 53h ; S
 		JE MOVE_LPADDLE_DOWN
 
+		CMP AL, 51h ; Q
+		JE EXIT_TO_MAIN_MENU
+		CMP AL, 71h ; q
+		JE EXIT_TO_MAIN_MENU
+
 		CMP AI_CONTROLLED, 01h
 		JNE CHECK_RPADDLE_MOVEMENT
 
-		JMP EXIT_PADDLES_MOVEMENT
+		RET
+
+		EXIT_TO_MAIN_MENU:
+			MOV CURRENT_SCENE, 00h
+			RET
 
 		CHECK_RPADDLE_MOVEMENT:
 			CMP AL, 6Fh ; o
@@ -298,7 +305,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP AL, 4Ch ; L
 			JE MOVE_RPADDLE_DOWN
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 		CONTROL_BY_AI:
 			; BALL_Y + BALL_SIZE < RIGHT_PADDLE_Y
@@ -315,7 +322,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP AX, BALL_Y
 			JL MOVE_RPADDLE_DOWN
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 		MOVE_LPADDLE_UP:
 			MOV AX, PADDLE_VELOCITY
@@ -325,7 +332,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP LEFT_PADDLE_Y, AX
 			JL FIX_LPADDLE_TOP
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 			FIX_LPADDLE_TOP:
 				MOV LEFT_PADDLE_Y, AX
@@ -341,7 +348,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP LEFT_PADDLE_Y, AX
 			JG FIX_LPADDLE_BOTTOM
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 			FIX_LPADDLE_BOTTOM:
 				MOV LEFT_PADDLE_Y, AX
@@ -355,7 +362,7 @@ CODE SEGMENT PARA 'CODE'
 			CMP RIGHT_PADDLE_Y, AX
 			JL FIX_RPADDLE_TOP
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 			FIX_RPADDLE_TOP:
 				MOV RIGHT_PADDLE_Y, AX
@@ -371,14 +378,11 @@ CODE SEGMENT PARA 'CODE'
 			CMP RIGHT_PADDLE_Y, AX
 			JG FIX_RPADDLE_BOTTOM
 
-			JMP EXIT_PADDLES_MOVEMENT
+			RET
 
 			FIX_RPADDLE_BOTTOM:
 				MOV RIGHT_PADDLE_Y, AX
 				RET
-
-		EXIT_PADDLES_MOVEMENT:
-			RET
 	MOVE_PADDLES ENDP
 
 	DRAW_BALL PROC NEAR
@@ -478,26 +482,16 @@ CODE SEGMENT PARA 'CODE'
 
 	DRAW_UI PROC NEAR
 		; print left paddle points
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 04h ; row
-		MOV DL, 06h ; column
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOUT
-		LEA DX, LEFT_PADDLE_TEXT_POINTS
-		INT 21h
+		LEA AX, LEFT_PADDLE_TEXT_POINTS
+		MOV DH, 04h
+		MOV DL, 06h
+		CALL PUTS
 
 		; print right paddle points
-		MOV AH, 02h
-		MOV BH, 00h
+		LEA AX, RIGHT_PADDLE_TEXT_POINTS
 		MOV DH, 04h
 		MOV DL, 1Fh
-		INT 10h
-
-		MOV AH, 09h
-		LEA DX, RIGHT_PADDLE_TEXT_POINTS
-		INT 21h
+		CALL PUTS
 
 		RET	
 	draw_UI ENDP
@@ -525,50 +519,30 @@ CODE SEGMENT PARA 'CODE'
 	DRAW_GAME_OVER PROC NEAR
 		CALL CLEAR_SCREEN
 
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 04h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, GAME_OVER_TITLE
-		INT 21h
+		LEA AX, GAME_OVER_TITLE
+		MOV DH, 04h
+		MOV DL, 04h
+		CALL PUTS
 
 		; show the winner
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 06h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
 		CALL UPDATE_WINNER_TEXT
 
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, GAME_OVER_WINNER
-		INT 21h
+		LEA AX, GAME_OVER_WINNER
+		MOV DH, 06h
+		MOV DL, 04h
+		CALL PUTS
 
-		; Show the play again message
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 08h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, GAME_OVER_PLAY_AGAIN
-		INT 21h
+		; Show play again message
+		LEA AX, GAME_OVER_PLAY_AGAIN
+		MOV DH, 08h
+		MOV DL, 04h
+		CALL PUTS
 
 		; Show exit to main menu message
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 0Ah ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, GAME_OVER_GO_MAIN_MENU
-		INT 21h
+		LEA AX, GAME_OVER_GO_MAIN_MENU
+		MOV DH, 0Ah
+		MOV DL, 04h
+		CALL PUTS
 
 		; wait for key press
 		MOV AH, 00h
@@ -598,48 +572,28 @@ CODE SEGMENT PARA 'CODE'
 	DRAW_MAIN_MENU PROC NEAR
 		CALL CLEAR_SCREEN
 
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 04h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, MAIN_MENU_TITLE
-		INT 21h
+		LEA AX, MAIN_MENU_TITLE
+		MOV DH, 04h
+		MOV DL, 04h
+		CALL PUTS
 
 		; show single player option
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 06h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, MAIN_MENU_SINGLEPLAYER
-		INT 21h
+		LEA AX, MAIN_MENU_SINGLEPLAYER
+		MOV DH, 06h
+		MOV DL, 04h
+		CALL PUTS
 
 		; show multiplayer option
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 08h ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, MAIN_MENU_MULTIPLAYER
-		INT 21h
+		LEA AX, MAIN_MENU_MULTIPLAYER
+		MOV DH, 08h
+		MOV DL, 04h
+		CALL PUTS
 
 		; show the exit message
-		MOV AH, 02h ; set cursor position
-		MOV BH, 00h ; page number
-		MOV DH, 0Ah ; row number
-		MOV DL, 04h ; column number
-		INT 10h
-
-		MOV AH, 09h ; write string to STDOU
-		LEA DX, MAIN_MENU_EXIT
-		INT 21h
+		LEA AX, MAIN_MENU_EXIT
+		MOV DH, 0Ah
+		MOV DL, 04h
+		CALL PUTS
 
 		; wait for key press
 		WAIT_KEY_PRESS:
@@ -707,6 +661,24 @@ CODE SEGMENT PARA 'CODE'
 		MOV AH, 4Ch ; end program
 		INT 21h
 	CONCLUDE_EXIT_GAME ENDP
+
+	; AX - text
+	; DH - cursor row
+	; DL - cursor column
+	PUTS PROC NEAR
+		PUSH AX
+
+		; print left paddle points
+		MOV AH, 02h ; set cursor position
+		MOV BH, 00h ; page number
+		INT 10h
+
+		MOV AH, 09h ; write string to STDOUT
+		POP DX
+		INT 21h
+
+		RET
+	PUTS ENDP
 
 CODE ENDS
 END
